@@ -1,3 +1,4 @@
 /target
 /node/target
-bootstrap/target
+/bootstrap/target
+*idea
