@@ -5,22 +5,23 @@ use axum::{
 };
 use axum::extract::{Path, State};
 use axum::routing::post;
+use rustc_hash::FxHashSet;
 use tokio::sync::RwLock;
 
 
-type SharedNodeVector = Arc<RwLock<Vec<String>>>;
+type SharedNodeSet = Arc<RwLock<FxHashSet<String>>>;
 
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    pub connected_nodes: SharedNodeVector,
+    pub connected_nodes: SharedNodeSet,
     pub counter: Arc<RwLock<u64>>,
 }
 
 #[tokio::main]
 async fn main() {
     let state = AppState {
-        connected_nodes: Arc::new(RwLock::new(  vec![])),
+        connected_nodes: Arc::new(RwLock::new(  FxHashSet::default() )),
         counter: Arc::new(RwLock::new(0)),
     };
     // build our application with a single route
@@ -34,17 +35,39 @@ async fn main() {
 async fn hello_world(State(state): State<AppState>) -> String {
     let mut lock = state.counter.write().await;
     *lock += 1;
-    "Hello, World!\n".to_string() + &state.connected_nodes.read().await.join(", ") + &format!("\nCounter: {}", *lock)
+    let mut result = "".to_string();
+    for node in state.connected_nodes.read().await.iter() {
+        if !result.is_empty(){
+            result.push_str(", ");
+        }
+        result.push_str(&node);
+    }
+    result
 }
 
 async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> String {
     let mut lock = state.connected_nodes.write().await;
-    lock.push(name);
-    lock.join(", ")
+    lock.insert(name.clone());
+    let mut result = "".to_string();
+    //return all entries
+    for item in lock.iter() {
+        if !result.is_empty() {
+            result.push_str(", ");
+        }
+        result.push_str(item);
+    }
+    result
 }
 
 async fn delete_node(State(state): State<AppState>, Path(name): Path<String>) -> String {
     let mut lock = state.connected_nodes.write().await;
     lock.retain(|n| n != &name);
-    lock.join(", ")
+    let mut result = "".to_string();
+    for item in lock.iter() {
+        if !result.is_empty() {
+            result.push_str(", ");
+        }
+        result.push_str(item);
+    }
+    result
 }

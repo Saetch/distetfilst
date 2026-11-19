@@ -1,0 +1,23 @@
+networks:
+  node-network:
+volumes:
+  bootstrap-volume:
+
+services:
+  node:
+    build:
+      context: ./node
+      dockerfile: Dockerfile
+    networks:
+      - node-network
+    volumes:
+      - /data
+  bootstrap:
+    container_name: bootstrap_container
+    build:
+      context: ./bootstrap
+      dockerfile: Dockerfile
+    networks:
+      - node-network
+    volumes:
+      - bootstrap-volume:/data
