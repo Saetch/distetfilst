@@ -12,6 +12,8 @@ services:
       - node-network
     volumes:
       - /data
+    depends_on:
+      - bootstrap
   bootstrap:
     container_name: bootstrap_container
     build:
