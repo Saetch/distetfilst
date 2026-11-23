@@ -25,7 +25,11 @@ async fn main() {
         counter: Arc::new(RwLock::new(0)),
     };
     // build our application with a single route
-    let app = Router::new().route("/", get(hello_world)).route("/signup/{name}", post(signup)).route("/delete_node/{name}", post(delete_node)).with_state(state);
+    let app = Router::new()
+        .route("/", get(hello_world))
+        .route("/signup/{name}", post(signup))
+        .route("/delete_node/{name}", post(delete_node))
+        .with_state(state);
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
