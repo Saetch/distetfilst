@@ -68,7 +68,8 @@ async fn establish_connection(state: State<AppState>, Path(name): Path<String>) 
         println!("Already established connection to node {}", name);
         return StatusCode::CONFLICT;
     }
-    lock.push(name);
+    println!("Connection to node {} established", &name);
 
+    lock.push(name);
     StatusCode::OK
 }
