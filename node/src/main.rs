@@ -1,10 +1,15 @@
+use std::sync::Arc;
 use axum::extract::{Path, State};
+use axum::http::{Response, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::post;
+use tokio::sync::RwLock;
 
+type SharedStringVector = Arc<RwLock<Vec<String>>>;
 #[derive(Debug, Clone)]
 struct AppState {
     pub name: String,
-    pub connected_nodes: Vec<String>,
+    pub connected_nodes: SharedStringVector,
 }
 
 #[tokio::main]
@@ -44,22 +49,26 @@ async fn main() {
     // --------------
 
     let state = AppState {
-        name: host_name,
-        connected_nodes: connected_nodes
+        name: host_name.clone(),
+        connected_nodes: Arc::new(RwLock::new(connected_nodes)),
     };
+
     let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async move { state.name.clone() }))
-        .route("/establish_connection", post(establish_connection)).with_state(state);
+        .route("/", axum::routing::get(|| async move { host_name }))
+        .route("/establish_connection", post(establish_connection)).with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     // TODO: Acknowledge bootstrap container for successful connection
     //client.post(&bootstrap_target).send().await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn establish_connection(state: State<AppState>, Path(name): Path<String>) -> String {
-    if state.connected_nodes.read().await.contains(&name) {
-        state.connection_ongoing.store(false, std::sync::atomic::Ordering::SeqCst);
-        return "success".to_string();
+async fn establish_connection(state: State<AppState>, Path(name): Path<String>) -> impl IntoResponse {
+    let mut lock = state.connected_nodes.write().await;
+    if lock.contains(&name) {
+        println!("Already established connection to node {}", name);
+        return StatusCode::CONFLICT;
     }
-    "failure".to_string()
+    lock.push(name);
+
+    StatusCode::OK
 }
