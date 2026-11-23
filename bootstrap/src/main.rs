@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use axum::{
     routing::get,
     Router,
@@ -16,6 +17,7 @@ type SharedNodeSet = Arc<RwLock<FxHashSet<String>>>;
 pub struct AppState {
     pub connected_nodes: SharedNodeSet,
     pub counter: Arc<RwLock<u64>>,
+    pub connection_ongoing: Arc<AtomicBool>
 }
 
 #[tokio::main]
@@ -23,12 +25,14 @@ async fn main() {
     let state = AppState {
         connected_nodes: Arc::new(RwLock::new(  FxHashSet::default() )),
         counter: Arc::new(RwLock::new(0)),
+        connection_ongoing: Arc::new(AtomicBool::default())
     };
     // build our application with a single route
     let app = Router::new()
         .route("/", get(hello_world))
         .route("/signup/{name}", post(signup))
         .route("/delete_node/{name}", post(delete_node))
+        .route("/connection_completed/{name}", post(connection_completed))
         .with_state(state);
 
     // run our app with hyper, listening globally on port 3000
@@ -50,6 +54,7 @@ async fn hello_world(State(state): State<AppState>) -> String {
 }
 
 async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> String {
+    state.connection_ongoing.store(true, std::sync::atomic::Ordering::Release);
     let mut lock = state.connected_nodes.write().await;
     lock.insert(name.clone());
     let mut result = "".to_string();
@@ -61,6 +66,15 @@ async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> Stri
         result.push_str(item);
     }
     result
+}
+
+async fn connection_completed(state: State<AppState>, Path(name): Path<String>) -> String {
+    if state.connected_nodes.read().await.contains(&name) {
+        state.connection_ongoing.store(false, std::sync::atomic::Ordering::SeqCst);
+        return "success".to_string();
+    }
+    "failure".to_string()
+
 }
 
 async fn delete_node(State(state): State<AppState>, Path(name): Path<String>) -> String {
