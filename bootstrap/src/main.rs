@@ -24,7 +24,7 @@ async fn main() {
         counter: Arc::new(RwLock::new(0)),
     };
     // build our application with a single route
-    let app = Router::new().route("/", get(hello_world)).route("/signup/{name}", post(signup)).route("/delete_node/{name}", post(delete_node)).with_state(state);
+    let app = Router::new().route("/", get(hello_world)).route("/show_path", get(show_nodes)).route("/signup/{name}", post(signup)).route("/delete_node/{name}", post(delete_node)).with_state(state);
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -47,4 +47,8 @@ async fn delete_node(State(state): State<AppState>, Path(name): Path<String>) ->
     let mut lock = state.connected_nodes.write().await;
     lock.retain(|n| n != &name);
     lock.join(", ")
+}
+
+async fn show_nodes(State(state): State<AppState>) -> String {
+    state.connected_nodes.read().await.join(", ")
 }
