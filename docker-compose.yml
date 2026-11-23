@@ -14,6 +14,7 @@ services:
       - /data
     depends_on:
       - bootstrap
+
   bootstrap:
     container_name: bootstrap_container
     build:
@@ -23,3 +24,17 @@ services:
       - node-network
     volumes:
       - bootstrap-volume:/data
+
+
+  nats-seed:
+    image: nats:latest
+    command:
+      - "-c"
+      - "/etc/nats/nats-server.conf"
+    volumes:
+      - ./nats/nats_conf/nats-server.conf:/etc/nats/nats-server.conf:ro
+    ports:
+      - "4200:4222"
+      - "8200:8222"
+    expose:
+      - "6222"
