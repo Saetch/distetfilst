@@ -67,7 +67,6 @@ async fn main() {
         .route("/", axum::routing::get(|| async move { hn_clone }))
         .route("/establish_connection/{name}", post(establish_connection)).with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
-    // TODO: Acknowledge bootstrap container for successful connection
     client.post(bootstrap_target+"connection_completed/"+ &host_name).send().await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
