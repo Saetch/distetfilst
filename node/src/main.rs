@@ -21,10 +21,10 @@ async fn main() {
     println!("Host name: {}", host_name);
     println!("Bootstrap target: {}", bootstrap_target);
     let client = reqwest::Client::new();
-    let bootstrap_target = bootstrap_target+"signup/"+&host_name;
-    let mut response = client.post(&bootstrap_target).send().await.unwrap();
+    let bootstrap_target_signup = bootstrap_target.clone()+"signup/"+&host_name;
+    let mut response = client.post(&bootstrap_target_signup).send().await.unwrap();
     while response.status() != reqwest::StatusCode::OK {
-        response = client.post(&bootstrap_target).send().await.unwrap();
+        response = client.post(&bootstrap_target_signup).send().await.unwrap();
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         println!("Retrying connection to bootstrap container ...");
     }
@@ -35,7 +35,7 @@ async fn main() {
     if node_list.len() < 5 {
         for node in node_list {
             if node == host_name { continue; }
-            let establish_connection = String::from("http://") +node+"/establish_connection/"+&host_name;
+            let establish_connection = String::from("http://") +node+":3001/establish_connection/"+&host_name;
             let node_response = client.post(establish_connection).send().await.unwrap();
             if node_response.status() != reqwest::StatusCode::OK {
                 println!("Failed to establish connection to node {}", node);
@@ -65,10 +65,10 @@ async fn main() {
     let hn_clone = host_name.clone();
     let app = axum::Router::new()
         .route("/", axum::routing::get(|| async move { hn_clone }))
-        .route("/establish_connection", post(establish_connection)).with_state(state.clone());
+        .route("/establish_connection/{name}", post(establish_connection)).with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     // TODO: Acknowledge bootstrap container for successful connection
-    client.post(bootstrap_target+"/connection_completed/"+ &host_name).send().await.unwrap();
+    client.post(bootstrap_target+"connection_completed/"+ &host_name).send().await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 

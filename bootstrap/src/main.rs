@@ -7,8 +7,8 @@ use axum::{
 use axum::extract::{Path, State};
 use axum::routing::post;
 use rustc_hash::FxHashSet;
-use tokio::sync::RwLock;
-
+use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore, SemaphorePermit};
+use tokio::task::yield_now;
 
 type SharedNodeSet = Arc<RwLock<FxHashSet<String>>>;
 
@@ -17,7 +17,8 @@ type SharedNodeSet = Arc<RwLock<FxHashSet<String>>>;
 pub struct AppState {
     pub connected_nodes: SharedNodeSet,
     pub counter: Arc<RwLock<u64>>,
-    pub connection_ongoing: Arc<AtomicBool>
+    pub connection_ongoing: Arc<Semaphore>,
+    pub connection_permit: Arc<RwLock<Option<OwnedSemaphorePermit>>>,
 }
 
 #[tokio::main]
@@ -25,7 +26,8 @@ async fn main() {
     let state = AppState {
         connected_nodes: Arc::new(RwLock::new(  FxHashSet::default() )),
         counter: Arc::new(RwLock::new(0)),
-        connection_ongoing: Arc::new(AtomicBool::default())
+        connection_ongoing: Arc::new(Semaphore::new(1)),
+        connection_permit: Arc::new(RwLock::new(None)),
     };
     // build our application with a single route
     let app = Router::new()
@@ -53,9 +55,9 @@ async fn hello_world(State(state): State<AppState>) -> String {
     result
 }
 
-async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> String {
-    while state.connection_ongoing.load(std::sync::atomic::Ordering::Relaxed) {}
-    state.connection_ongoing.store(true, std::sync::atomic::Ordering::Release);
+async fn signup(State(mut state): State<AppState>, Path(name): Path<String>) -> String {
+    let sem = state.connection_ongoing.acquire_owned().await.unwrap();
+    *state.connection_permit.write().await = Some(sem);
     let mut lock = state.connected_nodes.write().await;
     lock.insert(name.clone());
     let mut result = "".to_string();
@@ -72,7 +74,7 @@ async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> Stri
 async fn connection_completed(state: State<AppState>, Path(name): Path<String>) -> String {
     println!("Connection completed: {}", name);
     if state.connected_nodes.read().await.contains(&name) {
-        state.connection_ongoing.store(false, std::sync::atomic::Ordering::SeqCst);
+        state.connection_permit.write().await.take();
         return "success".to_string();
     }
     "failure".to_string()
