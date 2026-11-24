@@ -54,6 +54,7 @@ async fn hello_world(State(state): State<AppState>) -> String {
 }
 
 async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> String {
+    while state.connection_ongoing.load(std::sync::atomic::Ordering::Relaxed) {}
     state.connection_ongoing.store(true, std::sync::atomic::Ordering::Release);
     let mut lock = state.connected_nodes.write().await;
     lock.insert(name.clone());
@@ -69,6 +70,7 @@ async fn signup(State(state): State<AppState>, Path(name): Path<String>) -> Stri
 }
 
 async fn connection_completed(state: State<AppState>, Path(name): Path<String>) -> String {
+    println!("Connection completed: {}", name);
     if state.connected_nodes.read().await.contains(&name) {
         state.connection_ongoing.store(false, std::sync::atomic::Ordering::SeqCst);
         return "success".to_string();

@@ -14,6 +14,7 @@ services:
       - /data
     depends_on:
       - bootstrap
+      - nats-seed
 
   bootstrap:
     container_name: bootstrap_container
@@ -38,3 +39,5 @@ services:
       - "8200:8222"
     expose:
       - "6222"
+    networks:
+      - node-network
