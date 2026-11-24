@@ -11,6 +11,7 @@ struct AppState {
     pub name: String,
     pub connected_nodes: SharedStringVector,
     pub nats_client: async_nats::Client,
+    pub connection_allowed: Arc<RwLock<bool>>,
 }
 
 #[tokio::main]
@@ -60,13 +61,16 @@ async fn main() {
         name: host_name.clone(),
         connected_nodes: Arc::new(RwLock::new(connected_nodes)),
         nats_client,
+        connection_allowed: Arc::new(RwLock::new(true)),
     };
     println!("{:?}",state.connected_nodes.read().await);
     let hn_clone = host_name.clone();
     let app = axum::Router::new()
         .route("/", get(|| async move { hn_clone }))
         .route("/establish_connection/{name}", post(establish_connection))
-        .route("/get_connections", get(get_connections)).with_state(state.clone());
+        .route("/get_connections", get(get_connections))
+        .route("/is_connection_allowed", get(is_connection_allowed))
+        .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     client.post(bootstrap_target+"connection_completed/"+ &host_name).send().await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -88,4 +92,9 @@ async fn get_connections(state: State<AppState>) -> impl IntoResponse {
     let lock = state.connected_nodes.read().await;
     println!("Current connections: {:?}", *lock);
     lock.join(", ")
+}
+
+async fn is_connection_allowed(state: State<AppState>) -> impl IntoResponse {
+    let lock = state.connection_allowed.read().await;
+    format!("{}\n", *lock)
 }
