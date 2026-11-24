@@ -2,7 +2,7 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::{Response, StatusCode};
 use axum::response::IntoResponse;
-use axum::routing::post;
+use axum::routing::{get, post};
 use tokio::sync::RwLock;
 
 type SharedStringVector = Arc<RwLock<Vec<String>>>;
@@ -64,8 +64,9 @@ async fn main() {
     println!("{:?}",state.connected_nodes.read().await);
     let hn_clone = host_name.clone();
     let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async move { hn_clone }))
-        .route("/establish_connection/{name}", post(establish_connection)).with_state(state.clone());
+        .route("/", get(|| async move { hn_clone }))
+        .route("/establish_connection/{name}", post(establish_connection))
+        .route("/get_connections", get(get_connections)).with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
     client.post(bootstrap_target+"connection_completed/"+ &host_name).send().await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -81,4 +82,10 @@ async fn establish_connection(state: State<AppState>, Path(name): Path<String>) 
 
     lock.push(name);
     StatusCode::OK
+}
+
+async fn get_connections(state: State<AppState>) -> impl IntoResponse {
+    let lock = state.connected_nodes.read().await;
+    println!("Current connections: {:?}", *lock);
+    lock.join(", ")
 }
