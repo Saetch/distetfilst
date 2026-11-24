@@ -1,9 +1,11 @@
 use std::sync::Arc;
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use tokio::sync::RwLock;
+use rand::random;
 
 type SharedStringVector = Arc<RwLock<Vec<String>>>;
 #[derive(Debug, Clone)]
@@ -12,6 +14,7 @@ struct AppState {
     pub connected_nodes: SharedStringVector,
     pub nats_client: async_nats::Client,
     pub connection_allowed: Arc<RwLock<bool>>,
+    pub http_client: reqwest::Client,
 }
 
 #[tokio::main]
@@ -62,6 +65,7 @@ async fn main() {
         connected_nodes: Arc::new(RwLock::new(connected_nodes)),
         nats_client,
         connection_allowed: Arc::new(RwLock::new(true)),
+        http_client: client.clone(),
     };
     println!("{:?}",state.connected_nodes.read().await);
     let hn_clone = host_name.clone();
@@ -77,15 +81,29 @@ async fn main() {
 }
 
 async fn establish_connection(state: State<AppState>, Path(name): Path<String>) -> impl IntoResponse {
+    let allowed_lock = state.connection_allowed.read().await;
+    if !*allowed_lock {
+        let response = Response::builder().status(StatusCode::CONFLICT).body(Body::from("No connection allowed!")).unwrap();
+        return response;
+    }
+    drop(allowed_lock);
     let mut lock = state.connected_nodes.write().await;
     if lock.contains(&name) {
         println!("Already established connection to node {}", name);
-        return StatusCode::CONFLICT;
+        return Response::builder().status(StatusCode::CONFLICT).body(Body::from("Already established connection to node !")).unwrap();
     }
     println!("Connection to node {} established", &name);
-
+    if lock.len() > 2 {
+        let mut node_to_disconnect = random::<usize>() % lock.len();
+        if lock[node_to_disconnect] == name { node_to_disconnect += 1; };
+        if node_to_disconnect==lock.len() {
+            node_to_disconnect = 0;
+        }
+        println!("Disconnecting node {} from node {}", &lock[node_to_disconnect], &name);
+        state.http_client.post("http://".to_string() + &lock[node_to_disconnect]+":3001/disconnect_from/"+&state.name).send().await.unwrap();
+    }
     lock.push(name);
-    StatusCode::OK
+    Response::builder().status(StatusCode::OK).body(Body::empty()).unwrap()
 }
 
 async fn get_connections(state: State<AppState>) -> impl IntoResponse {
